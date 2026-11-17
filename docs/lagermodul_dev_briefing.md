@@ -1,7 +1,7 @@
 # Lagermodul – Developer Briefing
 
 **Epic:** [DEV-1722](https://pdr-cloud.atlassian.net/browse/DEV-1722) · **Idee:** [PCD-162](https://pdr-cloud.atlassian.net/browse/PCD-162) · **Design:** [UIX-50](https://pdr-cloud.atlassian.net/browse/UIX-50)
-**Stand:** 17.11.2026 · **Autor:** Tobias Brinster (Product) · **Status:** Bereit für Refinement
+**Stand:** 17.11.2026 · **Autor:** Tobias Brinster (Product) · **Status:** Bereit für Refinement · **Entscheidungen E1–E5, E7, E9, E11–E14 bestätigt am 17.11.2026**
 
 > **Ziel:** Das Lagermodul in der Haupt-App soll im Werkstattalltag tatsächlich genutzt werden – für Verbrauchsmaterial, Kleinteile und wiederverwendbare Rest-/Gebrauchtteile (z. B. angeschnittene Seitenwände). Dieses Dokument beantwortet die offenen Fragen vorab, damit die Umsetzung ohne Rückfragen starten kann. Wo eine Entscheidung noch formal bestätigt werden muss, steht ein **Vorschlag (Default)**, mit dem du arbeiten kannst.
 
@@ -12,7 +12,7 @@
 | # | Feature | Ticket | Aufwand (Schätzung) | Priorität |
 |---|---------|--------|---------------------|-----------|
 | 1 | Lagerteil per Button zur Kalkulation hinzufügen (inkl. UPE-Übernahme) | [DEV-1733](https://pdr-cloud.atlassian.net/browse/DEV-1733) | M–L | 1 |
-| 2 | Lagerabgleich auch beim Bestellen (Pop-up „Teil bestellen? Ja/Nein“) | [DEV-1722](https://pdr-cloud.atlassian.net/browse/DEV-1722) (Story fehlt noch) | M | 2 |
+| 2 | Lagerabgleich auch beim Bestellen (Pop-up „Teil bestellen? Ja/Nein“) inkl. Teilbestand aufteilen | [DEV-1722](https://pdr-cloud.atlassian.net/browse/DEV-1722) (Story fehlt noch) | L | 2 |
 | 3 | Lagerartikel löschen/archivieren | [DEV-1731](https://pdr-cloud.atlassian.net/browse/DEV-1731) | S–M | 1 |
 | 4 | Wording/Erklärung „Gebindegröße“ | [DEV-1732](https://pdr-cloud.atlassian.net/browse/DEV-1732) | XS | 3 |
 
@@ -76,18 +76,18 @@ flowchart LR
         direction TB
         A1["Vorgang → Kalkulation →<br/>Texterfassung / Positionen"]:::existing
         A2["Button „Lagerteil hinzufügen“"]:::new
-        A3["Lager-Dialog öffnet sich<br/>(nur Artikel der Vorgangs-Filiale,<br/>keine archivierten Artikel)"]:::new
+        A3["Lager-Dialog öffnet sich<br/>(nur Artikel der Vorgangs-Filiale,<br/>keine archivierten, Bestand 0 ausgegraut)<br/>Spalten: Nr., Bez., Hersteller/Modell,<br/>Bestand, Lagerort, UPE, VK"]:::new
         A4["Artikel suchen / filtern<br/>(Nr., Bezeichnung, Warengruppe)<br/>+ Menge eingeben"]:::new
         A5{"Bestand ≥ Menge?"}:::decision
-        A6["Warnhinweis:<br/>„Nur X verfügbar“<br/>Trotzdem übernehmen?"]:::decision
-        A7["Position anlegen (Typ Ersatzteil):<br/>Art.-Nr., Bezeichnung, Menge, Einheit,<br/>UPE übernommen · Preis LEER<br/>Flag lagerteil + lager_artikel_id"]:::new
+        A6["Hinweis: „Nur X verfügbar“<br/>Menge wird auf X begrenzt<br/>(kein negativer Bestand)"]:::decision
+        A7["Position anlegen (Typ Ersatzteil):<br/>Art.-Nr., Bezeichnung, Menge, Einheit,<br/>UPE + VK vorbelegt (änderbar)<br/>Flag lagerteil + lager_artikel_id"]:::new
         A8["Bestandsbuchung „Entnahme“<br/>inkl. Vorgangsbezug im Bestandslog"]:::new
-        A9["Kalkulator setzt Preis manuell<br/>(UPE als Richtwert)"]:::existing
+        A9["Kalkulator prüft / ändert Preis"]:::existing
         A1 --> A2 --> A3 --> A4 --> A5
         A5 -- Ja --> A7
         A5 -- Nein --> A6
-        A6 -- Ja --> A7
-        A6 -- Nein --> A4
+        A6 -- "Menge = X" --> A7
+        A6 -- Abbrechen --> A4
         A7 --> A8 --> A9
     end
 
@@ -99,17 +99,25 @@ flowchart LR
         B4["Automatisch aus Bestellung<br/>ausgeschlossen"]:::new
         B5["Abgleich Art.-Nr. + alternative<br/>Art.-Nr. gegen Lager der Filiale<br/>(gleiche Logik wie Kalkulations-Abgleich)"]:::new
         B6{"Treffer mit<br/>Bestand > 0?"}:::decision
-        B7["Pop-up: Liste der Lagertreffer<br/>„Soll das Teil bestellt werden?“<br/>je Teil Ja / Nein"]:::new
+        B6b{"Bestand ≥<br/>benötigte Menge?"}:::decision
+        B7["Pop-up-Zeile: „Teil bestellen?“<br/>Ja / Nein · „Nein“ vorausgewählt"]:::new
+        B7b["Pop-up-Zeile Teilbestand:<br/>„X aus Lager, Rest bestellen“ (vorausgewählt)<br/>oder „Alles bestellen“"]:::new
         B8["Nein → Position aus Bestellung<br/>entfernen, als Lagerteil markieren,<br/>Entnahme buchen"]:::new
-        B9["Ja → Position normal bestellen"]:::existing
+        B11["Position splitten:<br/>X als Lagerteil + Entnahme,<br/>Rest bleibt in Bestellung"]:::new
+        B9["Ja / „Alles bestellen“ →<br/>Position normal bestellen"]:::existing
         B10["Bestellung erzeugen / versenden"]:::existing
         B1 --> B2 --> B3
         B3 -- Ja --> B4 --> B10
         B3 -- Nein --> B5 --> B6
         B6 -- Nein --> B10
-        B6 -- Ja --> B7
+        B6 -- Ja --> B6b
+        B6b -- Ja --> B7
+        B6b -- Nein --> B7b
         B7 --> B8 --> B10
-        B7 --> B9 --> B10
+        B7 --> B9
+        B7b --> B11 --> B10
+        B7b --> B9
+        B9 --> B10
     end
 
     subgraph C["③ Lagerartikel löschen / archivieren (DEV-1731)"]
@@ -146,6 +154,8 @@ flowchart LR
 
 **User Story:** Als Kalkulator möchte ich ein Teil direkt aus dem Lager in die Kalkulation übernehmen, damit ich keine Arbeitstext-Vorlage doppelt pflegen muss.
 
+> **Abweichung von PCD-162:** Im Ticket stand „Preis bleibt leer“. Entschieden wurde: **UPE und VK werden vorbelegt**, der Preis bleibt änderbar.
+
 **Ist:** Lagerteile kommen nur über eine zusätzlich gepflegte Arbeitstext-Vorlage in die Kalkulation. Der vorhandene Lager-Button gleicht nur *bestehende* Positionen ab.
 
 **Soll:**
@@ -154,10 +164,12 @@ flowchart LR
 2. Klick öffnet einen **Lager-Dialog** (Modal), der die Artikelsuche der Lager-Hauptansicht wiederverwendet:
    - Suche nach Artikelnummer, alternativer Artikelnummer, Bezeichnung, EAN
    - Filter nach Warengruppe
-   - Spalten: Art.-Nr., Bezeichnung, Einheit, verfügbarer Bestand (Filiale des Vorgangs), UPE, Lagerort
+   - Spalten (bestätigt): **Art.-Nr., Bezeichnung, Hersteller/Modell, verfügbarer Bestand** (Filiale des Vorgangs, mit Gebinde-Hinweis z. B. „3 Gebinde (= 36 ST)“), **Lagerort, UPE, VK**, Einheit
+   - Art (OEM/OE/IAS/Gebraucht) und Bild sind in V1 **nicht** nötig; die Tabelle soll aber erweiterbar sein (Folge-Ticket F1 Restteile)
    - Nur Artikel der **Filiale des Vorgangs** (bzw. ohne Filialzuordnung) und **keine archivierten** Artikel
+   - Artikel mit **Bestand 0** werden angezeigt, aber **ausgegraut und nicht wählbar** (Tooltip „Nicht auf Lager – bitte bestellen“)
 3. Nutzer wählt **einen oder mehrere** Artikel und gibt je Artikel eine **Menge** ein (Default 1, Dezimal erlaubt bei L/KG/M).
-4. Bei **Bestand < Menge**: Warnhinweis „Nur X {Einheit} verfügbar. Trotzdem übernehmen?“ – Übernahme ist erlaubt (Bestand darf negativ werden, siehe Entscheidung E3).
+4. Bei **Bestand < Menge**: Hinweis „Nur X {Einheit} verfügbar. Die Menge wird auf X begrenzt. Den Rest bitte über eine Bestellung beschaffen.“ – übernommen wird maximal der vorhandene Bestand (**kein negativer Bestand**, E3). Die Mengeneingabe ist auf den verfügbaren Bestand begrenzt.
 5. Pro Artikel wird eine **Ersatzteil-Position** angelegt:
 
 | Kalkulationsfeld | Wert |
@@ -169,22 +181,29 @@ flowchart LR
 | Einheit | Lager-Einheit |
 | **UPE** | **UPE aus dem Lagerartikel** (pro Einheit) |
 | EK | EK aus dem Lagerartikel (falls Feld vorhanden; nur informativ) |
-| **Preis** | **leer** – wird vom Kalkulator manuell gesetzt |
+| **Preis** | **VK des Lagerartikels vorbelegt**, änderbar: bei „Fester VK“ der hinterlegte Wert, bei „Aufschlag“ UPE + Aufschlag der Preisgruppe (gleiche Berechnung wie im Lagermodul). Ohne VK bleibt das Feld leer. |
 | Lager-Kennzeichen | wie beim bestehenden Abgleich (Position = Lagerteil) |
 | Referenz | `lager_artikel_id` (neu, falls nicht vorhanden) |
 
 6. Es wird eine **Entnahme** gebucht (gleiches Verhalten wie der bestehende Abgleich), Bestandslog-Eintrag mit Vorgangsbezug.
-7. Wird die Position später **gelöscht** oder die **Menge geändert**, wird die Bestandsbuchung entsprechend **korrigiert** (Rückbuchung/Differenzbuchung mit Log-Eintrag).
+7. Wird die Position später **gelöscht** oder die **Menge geändert**, wird die Bestandsbuchung entsprechend **korrigiert** (Rückbuchung/Differenzbuchung mit Log-Eintrag). Eine **Erhöhung** der Menge ist nur bis zum verfügbaren Bestand möglich.
 
 **Akzeptanzkriterien:**
 
 - [ ] Button ist sichtbar in Texterfassung/Positionen, wenn das Lagermodul für den Account aktiv ist; sonst nicht sichtbar.
 - [ ] Dialog zeigt nur Artikel der Vorgangs-Filiale + Artikel ohne Filialzuordnung, keine archivierten.
-- [ ] Nach Übernahme: Position mit UPE befüllt, Preisfeld leer, als Lagerteil gekennzeichnet.
+- [ ] Dialog zeigt die Spalten Art.-Nr., Bezeichnung, Hersteller/Modell, Bestand (mit Gebinde-Hinweis), Lagerort, UPE, VK.
+- [ ] Artikel mit Bestand 0 sind ausgegraut und nicht wählbar.
+- [ ] Menge > Bestand ist nicht möglich; Hinweis erscheint, Menge wird auf den Bestand begrenzt.
+- [ ] Nach Übernahme: UPE und Preis (VK) vorbelegt, Preis änderbar, Position als Lagerteil gekennzeichnet.
+- [ ] Artikel mit VK per Aufschlag: Preis = UPE + Aufschlag der Preisgruppe, identisch zum Wert in der Lager-Artikelansicht.
+- [ ] Artikel ohne VK: Preisfeld leer, kein Fehler.
 - [ ] Bestand reduziert sich um die Menge; Bestandslog zeigt „Entnahme – Vorgang {Nr.}“.
 - [ ] Position löschen → Bestand wird zurückgebucht, Log-Eintrag „Rückbuchung – Vorgang {Nr.}“.
 - [ ] Artikel ohne UPE → UPE-Feld bleibt leer, kein Fehler.
-- [ ] Funktioniert in freier Kalkulation **und** in importierten DAT/AX-Kalkulationen (als manuelle Zusatzposition; kein Rückschreiben an DAT/AX).
+- [ ] Offene Inventur in der Filiale → Hinweis „In dieser Filiale läuft eine Inventur. Bestandsbuchungen können das Inventurergebnis verfälschen.“; Übernahme bleibt möglich (E12).
+- [ ] Funktioniert in freier Kalkulation **und** in importierten DAT/AX-Kalkulationen (als manuelle PDR-Zusatzposition; kein Rückschreiben an DAT/AX; bestätigt, E9).
+- [ ] Nach erneutem Import/Aktualisierung einer DAT/AX-Kalkulation bleibt die Lager-Zusatzposition erhalten und wird nicht doppelt entnommen.
 
 ---
 
@@ -199,19 +218,29 @@ flowchart LR
 1. Klick auf **„Bestellungen“** aus der Kalkulation startet vor dem Erzeugen der Bestellung den Abgleich.
 2. Positionen, die **bereits als Lagerteil gekennzeichnet** sind (über Feature 1 oder den bestehenden Abgleich), werden **automatisch nicht bestellt** und erscheinen nicht im Pop-up.
 3. Für alle übrigen Ersatzteil-Positionen: Abgleich Teilenummer gegen Artikelnummer **und** alternative Artikelnummern im Lager der Vorgangs-Filiale. **Die vorhandene Abgleichslogik der Kalkulation wiederverwenden**, nicht neu bauen.
-4. Bei Treffern mit Bestand > 0: **Pop-up** (gleiches Layout wie das bestehende Abgleich-Pop-up) mit Liste der Treffer: Teilenummer, Bezeichnung, benötigte Menge, Lagerbestand, Lagerort. Frage je Teil: **„Soll das Teil bestellt werden? Ja / Nein“**. Default = **Nein** (nicht bestellen, weil auf Lager).
+4. Bei Treffern mit Bestand > 0: **Pop-up** (gleiches Layout wie das bestehende Abgleich-Pop-up) mit Liste der Treffer: Teilenummer, Bezeichnung, benötigte Menge, Lagerbestand, Lagerort. Frage je Teil: **„Soll das Teil bestellt werden? Ja / Nein“**. **„Nein“ ist vorausgewählt** (bestätigt, E11) – das Teil wird aus dem Lager genommen, sofern der Nutzer nicht aktiv auf „Ja“ umstellt.
 5. **Nein** → Position wird aus der Bestellung entfernt, als Lagerteil gekennzeichnet, Entnahme gebucht (identisch zu Feature 1, Punkt 6).
 6. **Ja** → Position wird normal bestellt, keine Bestandsänderung.
+6a. **Teilbestand** (0 < Bestand < benötigte Menge, **bestätigt: in diesem Epic**, E4): Die Zeile zeigt „Lager: X / benötigt: Y“ und bietet zwei Optionen:
+    - **„X aus Lager, Y−X bestellen“** (vorausgewählt)
+    - **„Alles bestellen“**
+    „Alles aus Lager“ gibt es nicht, weil der Bestand nicht negativ werden darf (E3).
+6b. Bei „X aus Lager, Rest bestellen“ wird die Kalkulationsposition **in zwei Positionen gesplittet**: Position A mit Menge X (Lagerteil, Entnahme gebucht), Position B mit Menge Y−X (wird bestellt). Beide Positionen behalten Teilenummer, Bezeichnung, UPE und Preis pro Einheit; die Summe der Kalkulation ändert sich nicht.
 7. Ohne Treffer → kein Pop-up, Bestellung läuft wie heute.
 
 **Akzeptanzkriterien:**
 
 - [ ] Pop-up erscheint nur bei Treffern mit Bestand > 0.
+- [ ] „Nein“ ist für jedes Teil vorausgewählt.
+- [ ] Ist in der Filiale eine Inventur offen, zeigt das Pop-up zusätzlich den Hinweis aus E12; Buchung bleibt möglich.
 - [ ] Bereits gekennzeichnete Lagerteile tauchen weder im Pop-up noch in der Bestellung auf.
 - [ ] Treffer über alternative Artikelnummer werden erkannt.
 - [ ] „Nein“ reduziert den Bestand und schreibt einen Log-Eintrag mit Vorgangsbezug.
 - [ ] Abbrechen des Pop-ups bricht die Bestellung ab (keine Teilbestellung, keine Bestandsänderung).
-- [ ] Teilbestand (benötigt 2, Lager 1): siehe Entscheidung E4.
+- [ ] Teilbestand (benötigt 4, Lager 1): Zeile zeigt „Lager: 1 / benötigt: 4“, „1 aus Lager, 3 bestellen“ ist vorausgewählt.
+- [ ] Nach Bestätigung: zwei Positionen (1 × Lagerteil, 3 × bestellt), Kalkulationssumme unverändert, Bestand 0, Bestellung enthält 3.
+- [ ] „Alles bestellen“ bei Teilbestand: keine Aufteilung, keine Bestandsänderung.
+- [ ] Wird eine gesplittete Lager-Position später gelöscht, wird nur deren Menge zurückgebucht.
 
 ---
 
@@ -245,7 +274,7 @@ flowchart LR
 - [ ] Historische Belege mit dem Artikel bleiben vollständig lesbar.
 - [ ] Während offener Inventur ist Löschen blockiert.
 - [ ] Wiederherstellen macht den Artikel wieder normal verfügbar.
-- [ ] Berechtigung: gleiche Rolle wie „Artikel bearbeiten“.
+- [ ] Berechtigung: gleiche Rolle wie „Artikel bearbeiten“ – gilt für Archivieren **und** Wiederherstellen (bestätigt, E7).
 
 ---
 
@@ -253,15 +282,22 @@ flowchart LR
 
 **Soll:** Info-Icon (ⓘ) mit Tooltip neben dem Feld „Gebindegröße“ in „Neuer Artikel“ / „Artikel bearbeiten“, zusätzlich eine Hilfezeile unter dem Feld.
 
-**Feldlabel:** `Gebindegröße (Stück pro Bestellung)`
+**Bestätigte Logik (E13):** Der Lagerbestand wird **in Gebinden** geführt. Wareneingang „1“ = Bestand +1 (= 1 Karton mit 12 Flaschen). Es wird **nicht** mit der Gebindegröße multipliziert.
+
+**Feldlabel:** `Gebindegröße (Inhalt pro Gebinde)`
 
 **Tooltip-Text (final):**
-> Anzahl der Einheiten, die Sie mit **einer** Bestellung dieses Artikels erhalten.
-> Beispiel: Gebindegröße **12** und Einheit **ST** → Sie bestellen 1 Karton und erhalten **12 Flaschen** Reiniger. Ihr Lagerbestand erhöht sich beim Wareneingang um 12.
+> Wie viele Einzelteile in **einem** Gebinde (Karton, Packung, Kanister) enthalten sind.
+> Beispiel: Gebindegröße **12** → 1 Gebinde = 1 Karton mit **12 Flaschen** Reiniger.
+> Bestand, Bestellung und Wareneingang werden **in Gebinden** gezählt: Bestellen Sie 1, erhalten Sie 1 Karton (12 Flaschen) und Ihr Bestand erhöht sich um 1.
 
 **Platzhalter im Feld:** `z. B. 12`
 
-**Bitte im Code prüfen:** Wird die Gebindegröße beim Wareneingang/in der Nachbestellung heute schon multipliziert (1 Bestellung = 12 Bestand)? Der Tooltip muss zum tatsächlichen Verhalten passen. Wenn **nicht** multipliziert wird, bitte als Befund im Ticket melden; dann passen wir den letzten Satz des Tooltips an, statt die Logik in diesem Ticket zu ändern.
+**Anzeige-Ergänzung:** Überall, wo Bestand oder Menge eines Artikels mit Gebindegröße > 1 angezeigt wird (Artikelliste, Lager-Dialog, Bestell-Pop-up, Warenkorb), zusätzlich den Inhalt anzeigen, z. B. **„3 Gebinde (= 36 ST)“**. So ist für jeden klar, was gemeint ist.
+
+**Bitte im Code prüfen:** Entspricht das heutige Verhalten beim Wareneingang/in der Nachbestellung dieser Logik (keine Multiplikation)? Falls der Code heute multipliziert, bitte als Befund im Ticket melden, bevor etwas geändert wird – sonst ändern sich Bestände bestehender Kunden.
+
+**Folge zu beachten:** Werkstatt-MA, die einzelne Flaschen entnehmen, buchen Bruchteile eines Gebindes (1 Flasche = 0,083). Siehe Risiko in Abschnitt 8.
 
 ---
 
@@ -290,28 +326,39 @@ Alle Abfragen für Auswahl, Suche, Abgleich, Nachbestellung und Werkstatt-MA bra
 
 ## 7. Entscheidungen
 
-Mit diesen Defaults kannst du arbeiten. Product bestätigt sie im Refinement; ändert sich etwas, wird es hier aktualisiert.
+Mit ✅ markierte Entscheidungen sind von Product bestätigt (17.11.2026). E6, E8 und E10 sind Defaults, mit denen du arbeiten kannst. Ändert sich etwas, wird es hier aktualisiert.
 
 | # | Frage | Entscheidung (Default) | Begründung |
 |---|-------|------------------------|------------|
-| E1 | Löschen = Hard oder Soft Delete? | **Soft Delete** (Archivierung). In der UI heißt die Aktion „Löschen“. | Referenzen in Belegen/Log, Wiederherstellbarkeit |
-| E2 | Wann wird Bestand bei Feature 1 reduziert? | **Sofort beim Übernehmen** in die Kalkulation; Rückbuchung beim Löschen/Ändern der Position | Konsistent zum bestehenden Abgleich |
-| E3 | Darf Bestand negativ werden? | **Ja, mit Warnhinweis** | Werkstattrealität: Bestand oft ungenau; kein harter Stopp im Kalkulationsfluss |
-| E4 | Teilbestand bei Bestellung (benötigt 2, Lager 1)? | **Version 1:** Pop-up zeigt „Lager: 1 / benötigt: 2“. „Nein“ = komplette Position aus Lager (Bestand wird negativ), „Ja“ = komplette Position bestellen. **Kein** automatisches Aufteilen. | Klein halten; Aufteilen ggf. später als eigenes Ticket |
-| E5 | Preis bei Übernahme aus dem Lager? | **UPE übernehmen, Preis leer** (so im Ticket gewünscht). Ein im Lager hinterlegter VK wird in V1 **nicht** übernommen. | Kalkulator entscheidet den Preis |
+| E1 ✅ | Löschen = Hard oder Soft Delete? | **Bestätigt: Soft Delete** (Archivierung). In der UI heißt die Aktion „Löschen“. | Referenzen in Belegen/Log, Wiederherstellbarkeit |
+| E2 ✅ | Wann wird Bestand bei Feature 1 reduziert? | **Bestätigt: sofort beim Übernehmen** in die Kalkulation; Rückbuchung beim Löschen/Ändern der Position | Konsistent zum bestehenden Abgleich |
+| E3 ✅ | Darf Bestand negativ werden? | **Bestätigt: Nein.** Bestand wird auf 0 begrenzt; Übernahme/Entnahme nur bis zum verfügbaren Bestand. Gilt für Feature 1, Feature 2 und Werkstatt-MA-Entnahme. | Bestand bleibt verlässlich |
+| E4 ✅ | Teilbestand bei Bestellung (benötigt 4, Lager 1)? | **Bestätigt: in diesem Epic.** Optionen „X aus Lager, Rest bestellen“ (vorausgewählt) oder „Alles bestellen“; Umsetzung per Positions-Split. | Vollständiger Nutzen ab Version 1 |
+| E5 ✅ | Preis bei Übernahme aus dem Lager? | **Bestätigt: UPE + VK vorbelegen**, Preis bleibt änderbar. VK = fester VK oder UPE + Aufschlag der Preisgruppe; ohne VK bleibt der Preis leer. | Spart Eingaben; Kalkulator behält die Kontrolle |
 | E6 | Gleiche Art.-Nr. nach Archivierung neu anlegen? | **Erlaubt** | Typischer Fall: Artikel versehentlich gelöscht oder neu gelistet |
-| E7 | Wer darf löschen? | Gleiche Berechtigung wie „Artikel bearbeiten“ | Keine neue Rolle nötig |
+| E7 ✅ | Wer darf löschen und wiederherstellen? | **Bestätigt:** gleiche Berechtigung wie „Artikel bearbeiten“ | Keine neue Rolle nötig |
 | E8 | Filialen ohne Filialfunktion? | Filter entfällt; alle aktiven Artikel sichtbar | Abwärtskompatibel |
-| E9 | DAT/AX-importierte Kalkulation? | Button verfügbar; Lagerteil wird als manuelle PDR-Position ergänzt, nicht an DAT/AX zurückgeschrieben | Kein Eingriff in Schnittstellen |
+| E9 ✅ | DAT/AX-importierte Kalkulation? | Button verfügbar; Lagerteil wird als manuelle PDR-Position ergänzt, nicht an DAT/AX zurückgeschrieben | Kein Eingriff in Schnittstellen |
 | E10 | Mehrfachauswahl im Lager-Dialog? | **Ja** | Typisch: mehrere Kleinteile/Clips auf einmal |
+| E11 ✅ | Vorauswahl im Bestell-Pop-up? | **Bestätigt: „Nein“ (nicht bestellen) vorausgewählt** | Verhindert unnötige Bestellungen am zuverlässigsten |
+| E12 ✅ | Entnahme/Übernahme während offener Inventur? | **Bestätigt: nur warnen**, Buchung bleibt möglich. Gilt für Feature 1, Feature 2 und Werkstatt-MA-Entnahme. Löschen (Feature 3) bleibt gesperrt. | Werkstattbetrieb darf nicht blockiert werden |
+| E13 ✅ | Gebindegröße beim Wareneingang? | **Bestätigt: Bestand in Gebinden**, Wareneingang 1 = Bestand +1, keine Multiplikation | Bestellung und Bestand nutzen dieselbe Einheit |
+| E14 ✅ | Spalten im Lager-Dialog? | **Bestätigt:** Art.-Nr., Bezeichnung, Hersteller/Modell, Bestand (mit Gebinde-Hinweis), Lagerort, UPE, VK, Einheit | Alles, was für die Auswahl und den Preis nötig ist |
 
 ---
 
 ## 8. Abhängigkeiten & Risiken
 
 - **DEV-1708 (Filialfilter Lagerort):** Wenn die Filialzuordnung grundsätzlich nicht greift, zeigen der neue Dialog und der Bestell-Abgleich Artikel anderer Filialen. → Vor Feature 1/2 klären, ob DEV-1708 nur den Wareneingang betrifft oder die Filiallogik allgemein.
-- **Offene Inventur:** Laut Doku führen Bestandsänderungen während einer offenen Inventur zu Fehlern. Bei Feature 1/2 (Entnahme) mindestens **Warnhinweis** anzeigen, wenn für die Filiale eine Inventur offen ist. Sperren ist nicht nötig, das würde den Werkstattbetrieb blockieren.
+- **Offene Inventur:** Laut Doku führen Bestandsänderungen während einer offenen Inventur zu Fehlern. Bei Feature 1/2 (Entnahme) mindestens **Warnhinweis** anzeigen, wenn für die Filiale eine Inventur offen ist. Sperren ist nicht nötig, das würde den Werkstattbetrieb blockieren. **Bestätigt (E12).**
+- **Kein negativer Bestand (E3) – Gleichzeitigkeit:** Zwei Nutzer entnehmen gleichzeitig das letzte Teil. Die Prüfung „Bestand ≥ Menge“ muss **serverseitig und atomar** beim Buchen erfolgen (z. B. bedingtes Update / Row-Lock), nicht nur im Frontend. Schlägt sie fehl: Meldung „Bestand hat sich geändert – nur noch X verfügbar“.
+- **Bestehende negative Bestände:** Kunden können heute schon negative Bestände haben. Diese **nicht automatisch ändern**; sie verhindern einfach weitere Entnahmen, bis per Bestandskorrektur oder Inventur ausgeglichen wird. Bitte vor Release per Query prüfen, wie viele Artikel betroffen sind, und CS informieren.
+- **Manuelle Bestandskorrektur:** Bleibt für Lagerverantwortliche möglich, darf den Bestand aber ebenfalls nicht unter 0 setzen.
+- **Werkstatt-MA mit Gebinden:** Durch E3 kann ein Werkstatt-MA keine Flasche mehr entnehmen, wenn der Bestand 0 ist – auch wenn physisch noch etwas da ist. Das ist gewollt und macht Bestandsfehler sichtbar; CS sollte Kunden darauf hinweisen.
+- **DAT/AX-Re-Import (E9):** Prüfen, ob manuelle PDR-Zusatzpositionen bei erneutem Import/Aktualisierung einer DAT/AX-Kalkulation erhalten bleiben. Falls nicht: vor Umsetzung melden – sonst gehen Lagerteile samt Bestandsbuchung verloren.
+- **Positions-Split (E4):** Prüfen, wie Rechnung, Auftragsübersicht und Teile-Status mit zwei Positionen derselben Teilenummer umgehen (Anzeige, Summen, Wareneingang).
 - **Doppelbuchung:** Wird eine Position erst über Feature 1 hinzugefügt und dann zusätzlich über den alten Abgleich-Button abgeglichen, darf nicht doppelt entnommen werden. → `ist_lagerteil = true` muss den Abgleich überspringen.
+- **Bestand in Gebinden (E13):** Bei Verbrauchsmaterial mit Gebindegröße > 1 entnehmen Werkstatt-MA einzelne Stücke → Bestand wird zum Bruchteil (z. B. 0,917 Gebinde). Durch E3 darf er dabei nicht unter 0 fallen. Bitte prüfen, ob Mengenfelder und Bestand Dezimalwerte mit ausreichend Nachkommastellen speichern und anzeigen. Falls das Probleme macht, im Refinement besprechen (Option: Entnahme-Dialog rechnet „1 ST“ automatisch in 1/12 Gebinde um).
 - **Abgleichslogik zentralisieren:** Kalkulations-Abgleich und Bestell-Abgleich nutzen dieselbe Funktion (Art.-Nr. + alternative Nr., Filiale, nicht archiviert).
 
 ---
@@ -320,10 +367,10 @@ Mit diesen Defaults kannst du arbeiten. Product bestätigt sie im Refinement; ä
 
 | # | Szenario | Erwartung |
 |---|----------|-----------|
-| T1 | Lagerteil (Bestand 5) mit Menge 2 in freie Kalkulation übernehmen | Position mit UPE, Preis leer; Bestand 3; Log „Entnahme – Vorgang X“ |
+| T1 | Lagerteil (Bestand 5) mit Menge 2 in freie Kalkulation übernehmen | Position mit UPE und vorbelegtem VK; Bestand 3; Log „Entnahme – Vorgang X“ |
 | T2 | Position aus T1 löschen | Bestand 5; Log „Rückbuchung“ |
 | T3 | Menge in T1 von 2 auf 3 ändern | Bestand 2; Differenzbuchung |
-| T4 | Menge 4 bei Bestand 1 | Warnhinweis; nach Bestätigung Bestand −3 |
+| T4 | Menge 4 bei Bestand 1 übernehmen | Hinweis „Nur 1 verfügbar“; Menge wird auf 1 begrenzt; Bestand 0 |
 | T5 | Bestellung aus Kalkulation mit 1 Lagertreffer → „Nein“ | Teil nicht in Bestellung; als Lagerteil markiert; Bestand reduziert |
 | T6 | Bestellung mit Treffer über alternative Art.-Nr. | Treffer im Pop-up |
 | T7 | Bestellung mit bereits markiertem Lagerteil | Kein Pop-up für dieses Teil; nicht bestellt |
@@ -334,11 +381,65 @@ Mit diesen Defaults kannst du arbeiten. Product bestätigt sie im Refinement; ä
 | T12 | Archivierten Artikel wiederherstellen | Wieder auswählbar, Bestand 0 |
 | T13 | Filiale A: Artikel nur Filiale B | Nicht im Dialog/Abgleich (abhängig von DEV-1708) |
 | T14 | Tooltip Gebindegröße | Text wie in Abschnitt 5, Feature 4 |
+| T14a | Wareneingang 1 bei Gebindegröße 12 | Bestand +1; Anzeige „1 Gebinde (= 12 ST)“ |
 | T15 | Lagermodul für Account deaktiviert | Kein Button, kein Pop-up |
+| T16 | Artikel mit VK per Aufschlag (UPE 100 €, Aufschlag 20 %) übernehmen | Preis 120 € vorbelegt, änderbar |
+| T17 | Artikel ohne UPE und ohne VK übernehmen | UPE und Preis leer, kein Fehler |
+| T18 | Bestell-Pop-up mit 2 Lagertreffern öffnen | Beide Zeilen „Nein“ vorausgewählt |
+| T19 | Lagerteil übernehmen bei offener Inventur | Hinweis erscheint, Übernahme und Entnahme funktionieren |
+| T20 | Bestellung: benötigt 4, Lager 1 → „1 aus Lager, 3 bestellen“ | 2 Positionen; Bestand 0; Bestellung über 3; Kalkulationssumme unverändert |
+| T21 | Bestellung: benötigt 4, Lager 1 → „Alles bestellen“ | 1 Position, Bestellung über 4, Bestand 1 |
+| T22 | Lager-Dialog: Artikel mit Bestand 0 | Ausgegraut, nicht wählbar |
+| T23 | Zwei Nutzer übernehmen gleichzeitig das letzte Teil | Nur eine Buchung gelingt; zweiter Nutzer erhält Meldung, Bestand 0 |
+| T24 | Werkstatt-MA entnimmt bei Bestand 0 | Entnahme nicht möglich, Hinweis |
+| T25 | DAT-Kalkulation mit Lager-Zusatzposition erneut importieren | Zusatzposition und Bestandsbuchung bleiben unverändert |
 
 ---
 
-## 10. Quellen
+## 10. Ausblick – Folge-Tickets (nicht Teil dieses Epics)
+
+Diese Ideen sind von Product gewünscht und sollen **bei der Umsetzung mitgedacht** werden (Datenmodell und Komponenten so bauen, dass sie später ohne Umbau möglich sind). Für jede wird ein eigenes Ticket angelegt.
+
+### F1 – Rest- und Gebrauchtteile einlagern
+
+**Problem:** Bei Karosserieteilen (z. B. Seitenwand, Seitenrahmen) wird oft nur ein Teil verbaut. Der Rest ist nicht mehr retournierbar, könnte aber in einem anderen Auftrag genutzt werden.
+
+**Idee:**
+
+- Aus einer Kalkulationsposition oder Bestellung heraus: Aktion „Restteil einlagern“
+- Neuer Lagerartikel mit Art = **Gebraucht** (existiert bereits), vorbefüllt mit Teilenummer, Bezeichnung, Hersteller/Modell aus dem Vorgang
+- Zusätzliche Felder: **Zustand** (z. B. „angeschnitten – A-Säule fehlt“), **Fotos** (Pflicht, min. 1), **Herkunftsvorgang** (Link)
+- Bestand typischerweise 1; Lager-Dialog und Abgleich (Feature 1/2) zeigen Gebrauchtteile mit eigenem Badge „Restteil“ und Foto-Vorschau, damit vor Verwendung geprüft wird
+
+**Mitdenken jetzt:** Lager-Dialog und Abgleich-Pop-up so bauen, dass die Spalten **Art** und **Bild** sowie ein Badge „Restteil“ später ergänzt werden können (in V1 bewusst nicht enthalten, E14).
+
+### F2 – Mindestbestand-Alarm
+
+**Problem:** Nachbestellung auf Mindestbestand muss heute aktiv angestoßen werden.
+
+**Idee:**
+
+- Wenn eine Buchung (Entnahme, Abgleich, Werkstatt-MA) den Bestand **unter den Mindestbestand** (pro Filiale) senkt → Hinweis im Dashboard/Benachrichtigungscenter an Lagerverantwortliche
+- Ein Klick: „In den Warenkorb“ mit Menge = Auffüllen auf Mindestbestand (Bestand und Mindestbestand in Gebinden, siehe E13; auf volle Gebinde aufrunden)
+- Einstellung: Empfänger (Rolle/Nutzer), an/aus pro Filiale
+
+**Mitdenken jetzt:** Alle Bestandsbuchungen laufen über **eine zentrale Buchungsfunktion**, an der später ein Event „Bestand unter Mindestbestand“ hängen kann.
+
+### F3 – Ladenhüter-Report
+
+**Problem:** Artikel ohne Bewegung blähen die Liste auf und binden Kapital („Lagerleichen“).
+
+**Idee:**
+
+- Report/Filter in der Artikelliste: **„Keine Bewegung seit X Monaten“** (X wählbar: 6/12/24), mit Bestand und Bestandswert (Bestand × EK)
+- Mehrfachauswahl → **„Archivieren“** (nutzt Feature 3)
+- Optional jährlicher Hinweis vor der Inventur: „N Artikel ohne Bewegung – jetzt prüfen?“
+
+**Mitdenken jetzt:** Bestandslog mit Zeitstempel ist Grundlage; „letzte Bewegung“ sollte performant abfragbar sein (z. B. Feld `last_movement_at` am Artikel, bei jeder Buchung aktualisiert).
+
+---
+
+## 11. Quellen
 
 **Intern**
 

@@ -1,0 +1,70 @@
+flowchart LR
+    classDef new fill:#E6F4EA,stroke:#2E7D32,color:#1B1B1B
+    classDef decision fill:#FFF4E5,stroke:#E08600,color:#1B1B1B
+    classDef existing fill:#EEF2F7,stroke:#64748B,color:#1B1B1B
+    classDef stop fill:#FDECEC,stroke:#C62828,color:#1B1B1B
+
+    subgraph A["① Lagerteil zur Kalkulation hinzufügen (DEV-1733)"]
+        direction TB
+        A1["Vorgang → Kalkulation →<br/>Texterfassung / Positionen"]:::existing
+        A2["Button „Lagerteil hinzufügen“"]:::new
+        A3["Lager-Dialog öffnet sich<br/>(nur Artikel der Vorgangs-Filiale,<br/>keine archivierten Artikel)"]:::new
+        A4["Artikel suchen / filtern<br/>(Nr., Bezeichnung, Warengruppe)<br/>+ Menge eingeben"]:::new
+        A5{"Bestand ≥ Menge?"}:::decision
+        A6["Warnhinweis:<br/>„Nur X verfügbar“<br/>Trotzdem übernehmen?"]:::decision
+        A7["Position anlegen (Typ Ersatzteil):<br/>Art.-Nr., Bezeichnung, Menge, Einheit,<br/>UPE übernommen · Preis LEER<br/>Flag lagerteil + lager_artikel_id"]:::new
+        A8["Bestandsbuchung „Entnahme“<br/>inkl. Vorgangsbezug im Bestandslog"]:::new
+        A9["Kalkulator setzt Preis manuell<br/>(UPE als Richtwert)"]:::existing
+        A1 --> A2 --> A3 --> A4 --> A5
+        A5 -- Ja --> A7
+        A5 -- Nein --> A6
+        A6 -- Ja --> A7
+        A6 -- Nein --> A4
+        A7 --> A8 --> A9
+    end
+
+    subgraph B["② Lagerabgleich bei Bestellung (DEV-1722)"]
+        direction TB
+        B1["Kalkulation → „Bestellungen“"]:::existing
+        B2["Ersatzteil-Positionen ermitteln"]:::existing
+        B3{"Position bereits<br/>als Lagerteil markiert?"}:::decision
+        B4["Automatisch aus Bestellung<br/>ausgeschlossen"]:::new
+        B5["Abgleich Art.-Nr. + alternative<br/>Art.-Nr. gegen Lager der Filiale<br/>(gleiche Logik wie Kalkulations-Abgleich)"]:::new
+        B6{"Treffer mit<br/>Bestand > 0?"}:::decision
+        B7["Pop-up: Liste der Lagertreffer<br/>„Soll das Teil bestellt werden?“<br/>je Teil Ja / Nein"]:::new
+        B8["Nein → Position aus Bestellung<br/>entfernen, als Lagerteil markieren,<br/>Entnahme buchen"]:::new
+        B9["Ja → Position normal bestellen"]:::existing
+        B10["Bestellung erzeugen / versenden"]:::existing
+        B1 --> B2 --> B3
+        B3 -- Ja --> B4 --> B10
+        B3 -- Nein --> B5 --> B6
+        B6 -- Nein --> B10
+        B6 -- Ja --> B7
+        B7 --> B8 --> B10
+        B7 --> B9 --> B10
+    end
+
+    subgraph C["③ Lagerartikel löschen / archivieren (DEV-1731)"]
+        direction TB
+        C1["Startseite → Lager → Artikel"]:::existing
+        C2["Aktion „Löschen“ am Artikel"]:::new
+        C3["Bestätigung:<br/>„Artikel wirklich löschen? Ja / Nein“"]:::new
+        C4{"Offene Inventur<br/>in der Filiale?"}:::decision
+        C5["Blockiert:<br/>„Erst Inventur abschließen“"]:::stop
+        C6{"Bestand > 0 oder<br/>in offenem Warenkorb?"}:::decision
+        C7["Zusatzhinweis:<br/>Restbestand wird ausgebucht,<br/>Warenkorb-Position entfernt"]:::decision
+        C8["Soft Delete:<br/>archived_at / archived_by setzen<br/>Bestandslog-Eintrag „Archiviert“"]:::new
+        C9["Ausgeblendet in: Artikelliste, Suche,<br/>Lager-Dialog, Abgleich, Nachbestellung,<br/>Werkstatt-MA-Ansicht<br/>Historie bleibt erhalten"]:::new
+        C1 --> C2 --> C3 --> C4
+        C4 -- Ja --> C5
+        C4 -- Nein --> C6
+        C6 -- Nein --> C8
+        C6 -- Ja --> C7 --> C8
+        C8 --> C9
+    end
+
+    A ~~~ B ~~~ C
+
+    style A fill:#FAFAFA,stroke:#94A3B8
+    style B fill:#FAFAFA,stroke:#94A3B8
+    style C fill:#FAFAFA,stroke:#94A3B8

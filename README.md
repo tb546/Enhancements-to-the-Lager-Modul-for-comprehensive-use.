@@ -15,8 +15,10 @@ Ziel ist es, das aktuelle Lagermodul in der Main App von PDR.cloud zu verbessern
 ## Scope
 
 1. Lagerteil per Button zur Kalkulation hinzufügen (DEV-1733)
-2. Lagerabgleich beim Bestellen (DEV-1722)
+2. Lagerabgleich beim Bestellen inkl. Teilbestand aufteilen (DEV-1722)
 3. Lagerartikel löschen / archivieren (DEV-1731)
 4. Wording „Gebindegröße“ (DEV-1732)
+
+**Folge-Tickets (Ausblick):** Rest-/Gebrauchtteile einlagern · Mindestbestand-Alarm · Ladenhüter-Report
 
 ![Prozessflow](diagrams/lagermodul_prozessflow.png)

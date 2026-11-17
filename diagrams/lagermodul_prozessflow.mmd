@@ -8,18 +8,18 @@ flowchart LR
         direction TB
         A1["Vorgang → Kalkulation →<br/>Texterfassung / Positionen"]:::existing
         A2["Button „Lagerteil hinzufügen“"]:::new
-        A3["Lager-Dialog öffnet sich<br/>(nur Artikel der Vorgangs-Filiale,<br/>keine archivierten Artikel)"]:::new
+        A3["Lager-Dialog öffnet sich<br/>(nur Artikel der Vorgangs-Filiale,<br/>keine archivierten, Bestand 0 ausgegraut)<br/>Spalten: Nr., Bez., Hersteller/Modell,<br/>Bestand, Lagerort, UPE, VK"]:::new
         A4["Artikel suchen / filtern<br/>(Nr., Bezeichnung, Warengruppe)<br/>+ Menge eingeben"]:::new
         A5{"Bestand ≥ Menge?"}:::decision
-        A6["Warnhinweis:<br/>„Nur X verfügbar“<br/>Trotzdem übernehmen?"]:::decision
-        A7["Position anlegen (Typ Ersatzteil):<br/>Art.-Nr., Bezeichnung, Menge, Einheit,<br/>UPE übernommen · Preis LEER<br/>Flag lagerteil + lager_artikel_id"]:::new
+        A6["Hinweis: „Nur X verfügbar“<br/>Menge wird auf X begrenzt<br/>(kein negativer Bestand)"]:::decision
+        A7["Position anlegen (Typ Ersatzteil):<br/>Art.-Nr., Bezeichnung, Menge, Einheit,<br/>UPE + VK vorbelegt (änderbar)<br/>Flag lagerteil + lager_artikel_id"]:::new
         A8["Bestandsbuchung „Entnahme“<br/>inkl. Vorgangsbezug im Bestandslog"]:::new
-        A9["Kalkulator setzt Preis manuell<br/>(UPE als Richtwert)"]:::existing
+        A9["Kalkulator prüft / ändert Preis"]:::existing
         A1 --> A2 --> A3 --> A4 --> A5
         A5 -- Ja --> A7
         A5 -- Nein --> A6
-        A6 -- Ja --> A7
-        A6 -- Nein --> A4
+        A6 -- "Menge = X" --> A7
+        A6 -- Abbrechen --> A4
         A7 --> A8 --> A9
     end
 
@@ -31,17 +31,25 @@ flowchart LR
         B4["Automatisch aus Bestellung<br/>ausgeschlossen"]:::new
         B5["Abgleich Art.-Nr. + alternative<br/>Art.-Nr. gegen Lager der Filiale<br/>(gleiche Logik wie Kalkulations-Abgleich)"]:::new
         B6{"Treffer mit<br/>Bestand > 0?"}:::decision
-        B7["Pop-up: Liste der Lagertreffer<br/>„Soll das Teil bestellt werden?“<br/>je Teil Ja / Nein"]:::new
+        B6b{"Bestand ≥<br/>benötigte Menge?"}:::decision
+        B7["Pop-up-Zeile: „Teil bestellen?“<br/>Ja / Nein · „Nein“ vorausgewählt"]:::new
+        B7b["Pop-up-Zeile Teilbestand:<br/>„X aus Lager, Rest bestellen“ (vorausgewählt)<br/>oder „Alles bestellen“"]:::new
         B8["Nein → Position aus Bestellung<br/>entfernen, als Lagerteil markieren,<br/>Entnahme buchen"]:::new
-        B9["Ja → Position normal bestellen"]:::existing
+        B11["Position splitten:<br/>X als Lagerteil + Entnahme,<br/>Rest bleibt in Bestellung"]:::new
+        B9["Ja / „Alles bestellen“ →<br/>Position normal bestellen"]:::existing
         B10["Bestellung erzeugen / versenden"]:::existing
         B1 --> B2 --> B3
         B3 -- Ja --> B4 --> B10
         B3 -- Nein --> B5 --> B6
         B6 -- Nein --> B10
-        B6 -- Ja --> B7
+        B6 -- Ja --> B6b
+        B6b -- Ja --> B7
+        B6b -- Nein --> B7b
         B7 --> B8 --> B10
-        B7 --> B9 --> B10
+        B7 --> B9
+        B7b --> B11 --> B10
+        B7b --> B9
+        B9 --> B10
     end
 
     subgraph C["③ Lagerartikel löschen / archivieren (DEV-1731)"]
