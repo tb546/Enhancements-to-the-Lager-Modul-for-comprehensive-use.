@@ -1,7 +1,7 @@
 # Lagermodul – Developer Briefing
 
 **Epic:** [DEV-1722](https://pdr-cloud.atlassian.net/browse/DEV-1722) · **Idee:** [PCD-162](https://pdr-cloud.atlassian.net/browse/PCD-162) · **Design:** [UIX-50](https://pdr-cloud.atlassian.net/browse/UIX-50)
-**Stand:** 17.11.2026 · **Autor:** Tobias Brinster (Product) · **Status:** Bereit für Refinement · **Entscheidungen E1–E5, E7, E9, E11–E14 bestätigt am 17.11.2026**
+**Stand:** 19.11.2026 · **Autor:** Tobias Brinster (Product) · **Status:** Bereit für Refinement · **Alle Entscheidungen E1–E15 bestätigt (17./19.11.2026)**
 
 > **Ziel:** Das Lagermodul in der Haupt-App soll im Werkstattalltag tatsächlich genutzt werden – für Verbrauchsmaterial, Kleinteile und wiederverwendbare Rest-/Gebrauchtteile (z. B. angeschnittene Seitenwände). Dieses Dokument beantwortet die offenen Fragen vorab, damit die Umsetzung ohne Rückfragen starten kann. Wo eine Entscheidung noch formal bestätigt werden muss, steht ein **Vorschlag (Default)**, mit dem du arbeiten kannst.
 
@@ -63,6 +63,16 @@ Quelle: Confluence „PDR.cloud – Lagermodul“ (Support-Doku, A. Meller).
 
 ## 4. Prozessflow
 
+### 4.1 End-to-End-Prozess mit Rollen (Swimlane)
+
+Zeigt, **wer** (Lager/Büro, Kalkulator, Werkstatt, System) **wann** im Gesamtprozess handelt und wie die neuen Funktionen zusammenspielen – von der Artikelanlage über Kalkulation und Bestellung bis Wareneingang, Inventur und Archivierung. Kernaussage für die Umsetzung: **Alle Bestandsänderungen laufen über eine zentrale Bestandsbuchung** (atomar, Bestand ≥ 0, Inventur-Warnung, Log).
+
+![End-to-End-Swimlane](../diagrams/lagermodul_e2e_swimlane.png)
+
+Quelle: [`diagrams/lagermodul_e2e_swimlane.svg`](../diagrams/lagermodul_e2e_swimlane.svg) · erzeugt mit `python diagrams/lagermodul_e2e_swimlane.py <ausgabe.svg>`
+
+### 4.2 Detail-Abläufe je Feature
+
 Gerendert: [`../diagrams/lagermodul_prozessflow.png`](../diagrams/lagermodul_prozessflow.png) / [`.svg`](../diagrams/lagermodul_prozessflow.svg). Grün = neu, grau = existiert schon, orange = Entscheidung/Hinweis, rot = blockiert.
 
 ```mermaid
@@ -76,8 +86,8 @@ flowchart LR
         direction TB
         A1["Vorgang → Kalkulation →<br/>Texterfassung / Positionen"]:::existing
         A2["Button „Lagerteil hinzufügen“"]:::new
-        A3["Lager-Dialog öffnet sich<br/>(nur Artikel der Vorgangs-Filiale,<br/>keine archivierten, Bestand 0 ausgegraut)<br/>Spalten: Nr., Bez., Hersteller/Modell,<br/>Bestand, Lagerort, UPE, VK"]:::new
-        A4["Artikel suchen / filtern<br/>(Nr., Bezeichnung, Warengruppe)<br/>+ Menge eingeben"]:::new
+        A3["Lager-Dialog öffnet sich<br/>(Filialfilter = Vorgangs-Filiale,<br/>andere Filialen nur zur Info,<br/>keine archivierten, Bestand 0 ausgegraut)<br/>Spalten: Nr., Bez., Hersteller/Modell,<br/>Bestand, Lagerort, UPE, VK"]:::new
+        A4["Artikel suchen / filtern<br/>(Filiale, Nr., Bezeichnung, Warengruppe)<br/>Mehrfachauswahl + Menge je Artikel"]:::new
         A5{"Bestand ≥ Menge?"}:::decision
         A6["Hinweis: „Nur X verfügbar“<br/>Menge wird auf X begrenzt<br/>(kein negativer Bestand)"]:::decision
         A7["Position anlegen (Typ Ersatzteil):<br/>Art.-Nr., Bezeichnung, Menge, Einheit,<br/>UPE + VK vorbelegt (änderbar)<br/>Flag lagerteil + lager_artikel_id"]:::new
@@ -120,7 +130,7 @@ flowchart LR
         B9 --> B10
     end
 
-    subgraph C["③ Lagerartikel löschen / archivieren (DEV-1731)"]
+    subgraph C["③ Lagerartikel archivieren & endgültig löschen (DEV-1731)"]
         direction TB
         C1["Startseite → Lager → Artikel"]:::existing
         C2["Aktion „Löschen“ am Artikel"]:::new
@@ -131,12 +141,22 @@ flowchart LR
         C7["Zusatzhinweis:<br/>Restbestand wird ausgebucht,<br/>Warenkorb-Position entfernt"]:::decision
         C8["Soft Delete:<br/>archived_at / archived_by setzen<br/>Bestandslog-Eintrag „Archiviert“"]:::new
         C9["Ausgeblendet in: Artikelliste, Suche,<br/>Lager-Dialog, Abgleich, Nachbestellung,<br/>Werkstatt-MA-Ansicht<br/>Historie bleibt erhalten"]:::new
+        C10["Archiv: Filter „Archivierte anzeigen“"]:::existing
+        C11{"Aktion wählen"}:::decision
+        C12["Wiederherstellen<br/>(Bestand 0)"]:::new
+        C13["„Endgültig löschen“<br/>Warnung: nicht umkehrbar"]:::new
+        C14{"Offene Inventur?"}:::decision
+        C15["Stammsatz löschen (E15)<br/>Referenzen → NULL,<br/>Belege behalten Kopie,<br/>Bestandslog bleibt,<br/>Audit-Log-Eintrag"]:::new
         C1 --> C2 --> C3 --> C4
         C4 -- Ja --> C5
         C4 -- Nein --> C6
         C6 -- Nein --> C8
         C6 -- Ja --> C7 --> C8
-        C8 --> C9
+        C8 --> C9 --> C10 --> C11
+        C11 -- Wiederherstellen --> C12
+        C11 -- Endgültig löschen --> C13 --> C14
+        C14 -- Ja --> C5
+        C14 -- Nein --> C15
     end
 
     A ~~~ B ~~~ C
@@ -166,9 +186,13 @@ flowchart LR
    - Filter nach Warengruppe
    - Spalten (bestätigt): **Art.-Nr., Bezeichnung, Hersteller/Modell, verfügbarer Bestand** (Filiale des Vorgangs, mit Gebinde-Hinweis z. B. „3 Gebinde (= 36 ST)“), **Lagerort, UPE, VK**, Einheit
    - Art (OEM/OE/IAS/Gebraucht) und Bild sind in V1 **nicht** nötig; die Tabelle soll aber erweiterbar sein (Folge-Ticket F1 Restteile)
-   - Nur Artikel der **Filiale des Vorgangs** (bzw. ohne Filialzuordnung) und **keine archivierten** Artikel
+   - **Filialfilter** (Dropdown, bestätigt E8): Standard = **Filiale des Vorgangs**; umschaltbar auf eine andere Filiale oder „Alle Filialen“. Bei „Alle Filialen“ erscheint zusätzlich die Spalte **Filiale**.
+   - **Übernehmen nur aus der Vorgangs-Filiale.** Artikel/Bestände anderer Filialen sind **nur zur Info** sichtbar (Zeile ausgegraut, Tooltip „Bestand in Filiale {Name} – Übernahme nur aus Filiale {Vorgangs-Filiale}“). Entnahmen werden immer vom Bestand der Vorgangs-Filiale gebucht.
+   - Accounts **ohne Filialfunktion**: Filter wird ausgeblendet, alle aktiven Artikel sind übernehmbar.
+   - Artikel ohne Filialzuordnung gelten als in jeder Filiale verfügbar (wie heute).
+   - **Keine archivierten** Artikel
    - Artikel mit **Bestand 0** werden angezeigt, aber **ausgegraut und nicht wählbar** (Tooltip „Nicht auf Lager – bitte bestellen“)
-3. Nutzer wählt **einen oder mehrere** Artikel und gibt je Artikel eine **Menge** ein (Default 1, Dezimal erlaubt bei L/KG/M).
+3. **Mehrfachauswahl** (bestätigt, E10): Checkbox pro Zeile + **Mengenfeld** pro Zeile (Default 1, Dezimal erlaubt bei L/KG/M, max. = verfügbarer Bestand). Die Auswahl bleibt beim Suchen/Filtern erhalten; ein Zähler zeigt „{n} Artikel ausgewählt“. Ein Klick auf **„Übernehmen“** legt alle Positionen auf einmal an.
 4. Bei **Bestand < Menge**: Hinweis „Nur X {Einheit} verfügbar. Die Menge wird auf X begrenzt. Den Rest bitte über eine Bestellung beschaffen.“ – übernommen wird maximal der vorhandene Bestand (**kein negativer Bestand**, E3). Die Mengeneingabe ist auf den verfügbaren Bestand begrenzt.
 5. Pro Artikel wird eine **Ersatzteil-Position** angelegt:
 
@@ -191,9 +215,13 @@ flowchart LR
 **Akzeptanzkriterien:**
 
 - [ ] Button ist sichtbar in Texterfassung/Positionen, wenn das Lagermodul für den Account aktiv ist; sonst nicht sichtbar.
-- [ ] Dialog zeigt nur Artikel der Vorgangs-Filiale + Artikel ohne Filialzuordnung, keine archivierten.
+- [ ] Filialfilter steht beim Öffnen auf der Vorgangs-Filiale und ist auf andere Filialen / „Alle Filialen“ umschaltbar; keine archivierten Artikel.
+- [ ] Artikel anderer Filialen sind sichtbar, aber nicht übernehmbar (ausgegraut, Tooltip).
+- [ ] Ohne Filialfunktion ist der Filter ausgeblendet.
 - [ ] Dialog zeigt die Spalten Art.-Nr., Bezeichnung, Hersteller/Modell, Bestand (mit Gebinde-Hinweis), Lagerort, UPE, VK.
 - [ ] Artikel mit Bestand 0 sind ausgegraut und nicht wählbar.
+- [ ] Mehrere Artikel mit unterschiedlichen Mengen lassen sich in einem Schritt übernehmen; Auswahl bleibt beim Suchen erhalten.
+- [ ] Schlägt die Buchung für einen Artikel fehl (z. B. Bestand inzwischen geändert), werden die übrigen übernommen und der fehlgeschlagene Artikel mit Grund angezeigt.
 - [ ] Menge > Bestand ist nicht möglich; Hinweis erscheint, Menge wird auf den Bestand begrenzt.
 - [ ] Nach Übernahme: UPE und Preis (VK) vorbelegt, Preis änderbar, Position als Lagerteil gekennzeichnet.
 - [ ] Artikel mit VK per Aufschlag: Preis = UPE + Aufschlag der Preisgruppe, identisch zum Wert in der Lager-Artikelansicht.
@@ -217,7 +245,7 @@ flowchart LR
 
 1. Klick auf **„Bestellungen“** aus der Kalkulation startet vor dem Erzeugen der Bestellung den Abgleich.
 2. Positionen, die **bereits als Lagerteil gekennzeichnet** sind (über Feature 1 oder den bestehenden Abgleich), werden **automatisch nicht bestellt** und erscheinen nicht im Pop-up.
-3. Für alle übrigen Ersatzteil-Positionen: Abgleich Teilenummer gegen Artikelnummer **und** alternative Artikelnummern im Lager der Vorgangs-Filiale. **Die vorhandene Abgleichslogik der Kalkulation wiederverwenden**, nicht neu bauen.
+3. Für alle übrigen Ersatzteil-Positionen: Abgleich Teilenummer gegen Artikelnummer **und** alternative Artikelnummern im Lager der **Vorgangs-Filiale** (andere Filialen werden nicht berücksichtigt, analog E8). **Die vorhandene Abgleichslogik der Kalkulation wiederverwenden**, nicht neu bauen.
 4. Bei Treffern mit Bestand > 0: **Pop-up** (gleiches Layout wie das bestehende Abgleich-Pop-up) mit Liste der Treffer: Teilenummer, Bezeichnung, benötigte Menge, Lagerbestand, Lagerort. Frage je Teil: **„Soll das Teil bestellt werden? Ja / Nein“**. **„Nein“ ist vorausgewählt** (bestätigt, E11) – das Teil wird aus dem Lager genommen, sofern der Nutzer nicht aktiv auf „Ja“ umstellt.
 5. **Nein** → Position wird aus der Bestellung entfernt, als Lagerteil gekennzeichnet, Entnahme gebucht (identisch zu Feature 1, Punkt 6).
 6. **Ja** → Position wird normal bestellt, keine Bestandsänderung.
@@ -265,7 +293,23 @@ flowchart LR
 5. **Archivierte Artikel werden ausgeblendet in:** Artikelliste (Default), Suche, Lager-Dialog (Feature 1), Abgleich Kalkulation + Bestellung (Feature 2), Nachbestellung, Werkstatt-MA-Ansicht/QR-Scan.
 6. **Sichtbar bleiben:** bestehende Kalkulationspositionen, Bestellungen, Rechnungen, Bestandslog.
 7. **Filter „Archivierte anzeigen“** in der Artikelliste + Aktion **„Wiederherstellen“** (Bestand startet bei 0).
-8. Neuanlage mit derselben Artikelnummer wie ein archivierter Artikel ist erlaubt (Unique-Constraint, falls vorhanden, auf aktive Artikel beschränken) – siehe E6.
+8. **Neuanlage mit Artikelnummer eines archivierten Artikels** (bestätigt, E6): Beim Speichern eines neuen Artikels wird geprüft, ob ein **archivierter** Artikel mit derselben Artikelnummer (gleiche Filiale bzw. ohne Filialzuordnung) existiert. Falls ja, erscheint der Dialog:
+   > „Es gibt einen archivierten Artikel mit der Nummer {Art.-Nr.} – {Bezeichnung} (archiviert am {Datum}). Möchten Sie diesen wiederherstellen oder einen neuen Artikel anlegen?“
+   > **[Wiederherstellen]** · **[Neu anlegen]** · **[Abbrechen]**
+   - **Wiederherstellen** → archivierter Artikel wird reaktiviert (Bestand 0, Stammdaten wie vor der Archivierung, Historie bleibt verbunden); die Eingaben im Neuanlage-Formular werden verworfen.
+   - **Neu anlegen** → neuer, eigenständiger Artikel; der archivierte bleibt mit seiner Historie getrennt bestehen.
+   - Unique-Constraint auf die Artikelnummer (falls vorhanden) auf **aktive** Artikel beschränken.
+
+9. **Endgültig löschen aus dem Archiv** (bestätigt, E15): Im Filter „Archivierte anzeigen“ gibt es pro archiviertem Artikel die Aktion **„Endgültig löschen“** (nur für archivierte Artikel, nicht für aktive).
+   - Bestätigungsdialog mit deutlicher Warnung:
+     > „Der Artikel {Art.-Nr.} – {Bezeichnung} wird **endgültig gelöscht** und kann **nicht wiederhergestellt** werden. Bestehende Kalkulationen, Bestellungen und Rechnungen bleiben unverändert. Fortfahren?“
+     > **[Endgültig löschen]** (rot) · **[Abbrechen]**
+   - **Was gelöscht wird:** der Artikel-Stammsatz inkl. Bild, Filial-/Lagerort-Zuordnungen, Mindestbeständen, Lieferanten- und alternativen Artikelnummern.
+   - **Was bleibt:** Kalkulationspositionen, Bestellpositionen und Rechnungen behalten ihre **Kopie** von Art.-Nr., Bezeichnung, Menge und Preisen; nur die Referenz `lager_artikel_id` wird auf `NULL` gesetzt. Der **Bestandslog bleibt erhalten** (mit Snapshot von Art.-Nr. und Bezeichnung) und bleibt über den jeweiligen Vorgang nachvollziehbar.
+   - **Blockiert**, wenn der Artikel in einer **offenen Inventur** enthalten ist (gleiche Meldung wie beim Archivieren).
+   - Ein Eintrag im System-/Audit-Log hält fest, wer wann welchen Artikel endgültig gelöscht hat.
+   - Nach dem endgültigen Löschen erscheint der Artikel nicht mehr im Archiv; der Dialog aus E6 (archivierter Artikel mit gleicher Nummer) greift für diese Nummer nicht mehr.
+   - **Berechtigung:** gleiche wie Archivieren/Wiederherstellen (E7).
 
 **Akzeptanzkriterien:**
 
@@ -274,6 +318,13 @@ flowchart LR
 - [ ] Historische Belege mit dem Artikel bleiben vollständig lesbar.
 - [ ] Während offener Inventur ist Löschen blockiert.
 - [ ] Wiederherstellen macht den Artikel wieder normal verfügbar.
+- [ ] Neuanlage mit Art.-Nr. eines archivierten Artikels zeigt den Dialog „Wiederherstellen / Neu anlegen / Abbrechen“.
+- [ ] Neuanlage mit Art.-Nr. eines **aktiven** Artikels verhält sich wie heute (keine Änderung).
+- [ ] „Endgültig löschen“ ist nur bei archivierten Artikeln sichtbar und nur mit Bestätigung ausführbar.
+- [ ] Nach endgültigem Löschen: Artikel nicht mehr im Archiv; alte Kalkulationen, Bestellungen und Rechnungen zeigen unverändert Art.-Nr., Bezeichnung und Preise.
+- [ ] Bestandslog-Einträge des Artikels bleiben erhalten und sind im Vorgang weiterhin sichtbar.
+- [ ] Endgültiges Löschen ist bei offener Inventur blockiert.
+- [ ] Audit-Log-Eintrag mit Nutzer und Zeitpunkt wird geschrieben.
 - [ ] Berechtigung: gleiche Rolle wie „Artikel bearbeiten“ – gilt für Archivieren **und** Wiederherstellen (bestätigt, E7).
 
 ---
@@ -312,12 +363,17 @@ lager_artikel
   (Unique Art.-Nr. nur WHERE archived_at IS NULL)
 
 kalkulation_position
-  + lager_artikel_id   FK NULL            -- Referenz auf Lagerartikel
+  + lager_artikel_id   FK NULL  ON DELETE SET NULL   -- Referenz auf Lagerartikel
     ist_lagerteil      BOOL               -- vermutlich vorhanden (bestehender Abgleich)
 
 bestandslog
     typ                ENUM  + 'RUECKBUCHUNG', 'ARCHIVIERUNG'
     vorgang_id         FK NULL            -- vermutlich vorhanden
+    lager_artikel_id   FK NULL  ON DELETE SET NULL   -- E15: Log bleibt beim endgültigen Löschen
+  + artikel_nr_snapshot, bezeichnung_snapshot        -- E15: Lesbarkeit ohne Artikel
+
+bestellposition / weitere Referenzen auf lager_artikel
+    FK auf ON DELETE SET NULL umstellen; Art.-Nr./Bezeichnung/Preise müssen als Kopie in der Position stehen (prüfen!)
 ```
 
 Alle Abfragen für Auswahl, Suche, Abgleich, Nachbestellung und Werkstatt-MA brauchen den Filter `archived_at IS NULL`. Am besten zentral als Default-Scope oder Repository-Filter umsetzen, nicht an jeder Stelle einzeln.
@@ -326,7 +382,7 @@ Alle Abfragen für Auswahl, Suche, Abgleich, Nachbestellung und Werkstatt-MA bra
 
 ## 7. Entscheidungen
 
-Mit ✅ markierte Entscheidungen sind von Product bestätigt (17.11.2026). E6, E8 und E10 sind Defaults, mit denen du arbeiten kannst. Ändert sich etwas, wird es hier aktualisiert.
+Alle Entscheidungen sind von Product bestätigt (17./19.11.2026, ✅). Ändert sich etwas, wird es hier aktualisiert.
 
 | # | Frage | Entscheidung (Default) | Begründung |
 |---|-------|------------------------|------------|
@@ -335,15 +391,16 @@ Mit ✅ markierte Entscheidungen sind von Product bestätigt (17.11.2026). E6, E
 | E3 ✅ | Darf Bestand negativ werden? | **Bestätigt: Nein.** Bestand wird auf 0 begrenzt; Übernahme/Entnahme nur bis zum verfügbaren Bestand. Gilt für Feature 1, Feature 2 und Werkstatt-MA-Entnahme. | Bestand bleibt verlässlich |
 | E4 ✅ | Teilbestand bei Bestellung (benötigt 4, Lager 1)? | **Bestätigt: in diesem Epic.** Optionen „X aus Lager, Rest bestellen“ (vorausgewählt) oder „Alles bestellen“; Umsetzung per Positions-Split. | Vollständiger Nutzen ab Version 1 |
 | E5 ✅ | Preis bei Übernahme aus dem Lager? | **Bestätigt: UPE + VK vorbelegen**, Preis bleibt änderbar. VK = fester VK oder UPE + Aufschlag der Preisgruppe; ohne VK bleibt der Preis leer. | Spart Eingaben; Kalkulator behält die Kontrolle |
-| E6 | Gleiche Art.-Nr. nach Archivierung neu anlegen? | **Erlaubt** | Typischer Fall: Artikel versehentlich gelöscht oder neu gelistet |
+| E6 ✅ | Gleiche Art.-Nr. nach Archivierung neu anlegen? | **Bestätigt: Hinweis + Wahl.** Dialog „Archivierter Artikel gefunden – Wiederherstellen / Neu anlegen / Abbrechen“ | Verhindert Dubletten, ohne Neuanlage zu blockieren |
 | E7 ✅ | Wer darf löschen und wiederherstellen? | **Bestätigt:** gleiche Berechtigung wie „Artikel bearbeiten“ | Keine neue Rolle nötig |
-| E8 | Filialen ohne Filialfunktion? | Filter entfällt; alle aktiven Artikel sichtbar | Abwärtskompatibel |
+| E8 ✅ | Filialfilter im Lager-Dialog? | **Bestätigt:** Filter vorhanden (Standard = Vorgangs-Filiale, umschaltbar auf andere/alle). Andere Filialen **nur zur Info**, Übernahme/Entnahme nur aus der Vorgangs-Filiale. Ohne Filialfunktion wird der Filter ausgeblendet. Bestell-Abgleich prüft nur die Vorgangs-Filiale. | Transparenz über Bestände, ohne filialübergreifende Buchungen |
 | E9 ✅ | DAT/AX-importierte Kalkulation? | Button verfügbar; Lagerteil wird als manuelle PDR-Position ergänzt, nicht an DAT/AX zurückgeschrieben | Kein Eingriff in Schnittstellen |
-| E10 | Mehrfachauswahl im Lager-Dialog? | **Ja** | Typisch: mehrere Kleinteile/Clips auf einmal |
+| E10 ✅ | Mehrfachauswahl im Lager-Dialog? | **Bestätigt: Ja** – Checkbox + Menge pro Zeile, ein Klick übernimmt alle | Typisch: mehrere Kleinteile/Clips auf einmal |
 | E11 ✅ | Vorauswahl im Bestell-Pop-up? | **Bestätigt: „Nein“ (nicht bestellen) vorausgewählt** | Verhindert unnötige Bestellungen am zuverlässigsten |
 | E12 ✅ | Entnahme/Übernahme während offener Inventur? | **Bestätigt: nur warnen**, Buchung bleibt möglich. Gilt für Feature 1, Feature 2 und Werkstatt-MA-Entnahme. Löschen (Feature 3) bleibt gesperrt. | Werkstattbetrieb darf nicht blockiert werden |
 | E13 ✅ | Gebindegröße beim Wareneingang? | **Bestätigt: Bestand in Gebinden**, Wareneingang 1 = Bestand +1, keine Multiplikation | Bestellung und Bestand nutzen dieselbe Einheit |
 | E14 ✅ | Spalten im Lager-Dialog? | **Bestätigt:** Art.-Nr., Bezeichnung, Hersteller/Modell, Bestand (mit Gebinde-Hinweis), Lagerort, UPE, VK, Einheit | Alles, was für die Auswahl und den Preis nötig ist |
+| E15 ✅ | Endgültig löschen aus dem Archiv? | **Bestätigt:** Aktion „Endgültig löschen“ nur für archivierte Artikel, mit Warnung. Stammsatz wird gelöscht; Belege behalten ihre Kopie der Daten, Referenzen → `NULL`; Bestandslog bleibt (mit Snapshot). Blockiert bei offener Inventur. Rechte wie E7. | Archiv bleibt aufräumbar, ohne Belege oder Historie zu beschädigen |
 
 ---
 
@@ -357,6 +414,8 @@ Mit ✅ markierte Entscheidungen sind von Product bestätigt (17.11.2026). E6, E
 - **Werkstatt-MA mit Gebinden:** Durch E3 kann ein Werkstatt-MA keine Flasche mehr entnehmen, wenn der Bestand 0 ist – auch wenn physisch noch etwas da ist. Das ist gewollt und macht Bestandsfehler sichtbar; CS sollte Kunden darauf hinweisen.
 - **DAT/AX-Re-Import (E9):** Prüfen, ob manuelle PDR-Zusatzpositionen bei erneutem Import/Aktualisierung einer DAT/AX-Kalkulation erhalten bleiben. Falls nicht: vor Umsetzung melden – sonst gehen Lagerteile samt Bestandsbuchung verloren.
 - **Positions-Split (E4):** Prüfen, wie Rechnung, Auftragsübersicht und Teile-Status mit zwei Positionen derselben Teilenummer umgehen (Anzeige, Summen, Wareneingang).
+- **Endgültiges Löschen (E15) – Referenzen:** Vor der Umsetzung alle Tabellen mit Fremdschlüssel auf den Lagerartikel ermitteln (Kalkulation, Bestellung, Warenkorb, Inventur, Bestandslog, Werkstatt-Entnahme, Labeldruck). Jede Referenz muss entweder `ON DELETE SET NULL` mit Datenkopie in der Zeile haben oder (Warenkorb) mitgelöscht werden. Keine Referenz darf das Löschen mit einem DB-Fehler abbrechen oder alte Belege leer anzeigen.
+- **Aufbewahrungspflichten:** Bestandslog und Inventurdaten können für Buchhaltung/Prüfung relevant sein (GoBD). Deshalb werden sie beim endgültigen Löschen **nicht** entfernt – nur der Artikel-Stammsatz.
 - **Doppelbuchung:** Wird eine Position erst über Feature 1 hinzugefügt und dann zusätzlich über den alten Abgleich-Button abgeglichen, darf nicht doppelt entnommen werden. → `ist_lagerteil = true` muss den Abgleich überspringen.
 - **Bestand in Gebinden (E13):** Bei Verbrauchsmaterial mit Gebindegröße > 1 entnehmen Werkstatt-MA einzelne Stücke → Bestand wird zum Bruchteil (z. B. 0,917 Gebinde). Durch E3 darf er dabei nicht unter 0 fallen. Bitte prüfen, ob Mengenfelder und Bestand Dezimalwerte mit ausreichend Nachkommastellen speichern und anzeigen. Falls das Probleme macht, im Refinement besprechen (Option: Entnahme-Dialog rechnet „1 ST“ automatisch in 1/12 Gebinde um).
 - **Abgleichslogik zentralisieren:** Kalkulations-Abgleich und Bestell-Abgleich nutzen dieselbe Funktion (Art.-Nr. + alternative Nr., Filiale, nicht archiviert).
@@ -379,7 +438,8 @@ Mit ✅ markierte Entscheidungen sind von Product bestätigt (17.11.2026). E6, E
 | T10 | Artikel mit Bestand 3 löschen | Hinweis, Ausbuchung, Log „Archivierung“ |
 | T11 | Artikel löschen bei offener Inventur | Blockiert mit Meldung |
 | T12 | Archivierten Artikel wiederherstellen | Wieder auswählbar, Bestand 0 |
-| T13 | Filiale A: Artikel nur Filiale B | Nicht im Dialog/Abgleich (abhängig von DEV-1708) |
+| T13 | Filiale A: Artikel nur Filiale B | Dialog-Standard: nicht sichtbar; Filter „Filiale B“/„Alle“: sichtbar, aber nicht übernehmbar; Bestell-Abgleich: kein Treffer (abhängig von DEV-1708) |
+| T13a | Account ohne Filialfunktion | Kein Filialfilter, alle aktiven Artikel übernehmbar |
 | T14 | Tooltip Gebindegröße | Text wie in Abschnitt 5, Feature 4 |
 | T14a | Wareneingang 1 bei Gebindegröße 12 | Bestand +1; Anzeige „1 Gebinde (= 12 ST)“ |
 | T15 | Lagermodul für Account deaktiviert | Kein Button, kein Pop-up |
@@ -393,6 +453,12 @@ Mit ✅ markierte Entscheidungen sind von Product bestätigt (17.11.2026). E6, E
 | T23 | Zwei Nutzer übernehmen gleichzeitig das letzte Teil | Nur eine Buchung gelingt; zweiter Nutzer erhält Meldung, Bestand 0 |
 | T24 | Werkstatt-MA entnimmt bei Bestand 0 | Entnahme nicht möglich, Hinweis |
 | T25 | DAT-Kalkulation mit Lager-Zusatzposition erneut importieren | Zusatzposition und Bestandsbuchung bleiben unverändert |
+| T26 | Neuer Artikel mit Art.-Nr. eines archivierten Artikels | Dialog erscheint; „Wiederherstellen“ reaktiviert den alten Artikel, „Neu anlegen“ erzeugt einen zweiten |
+| T27 | 3 Artikel mit Mengen 2/1/5 gleichzeitig übernehmen | 3 Positionen, 3 Entnahmen im Bestandslog |
+| T28 | Archivierten Artikel endgültig löschen, der in einer abgerechneten Kalkulation verwendet wurde | Artikel weg; Kalkulation/Rechnung zeigen Art.-Nr., Bezeichnung, Preise unverändert; Bestandslog im Vorgang sichtbar |
+| T29 | Endgültig löschen bei offener Inventur | Blockiert mit Meldung |
+| T30 | Nach endgültigem Löschen neuen Artikel mit gleicher Art.-Nr. anlegen | Kein E6-Dialog, normale Neuanlage |
+| T31 | Aktiver (nicht archivierter) Artikel | Aktion „Endgültig löschen“ nicht vorhanden |
 
 ---
 

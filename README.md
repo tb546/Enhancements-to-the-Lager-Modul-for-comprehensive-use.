@@ -9,7 +9,8 @@ Ziel ist es, das aktuelle Lagermodul in der Main App von PDR.cloud zu verbessern
 | Datei | Beschreibung |
 |-------|--------------|
 | [`docs/lagermodul_dev_briefing.md`](docs/lagermodul_dev_briefing.md) | Developer-Briefing: Ist-Zustand, Glossar, Specs, Akzeptanzkriterien, Entscheidungen, Testfälle |
-| [`diagrams/lagermodul_prozessflow.mmd`](diagrams/lagermodul_prozessflow.mmd) | Prozessflow (Mermaid-Quelle) |
+| [`diagrams/lagermodul_e2e_swimlane.png`](diagrams/lagermodul_e2e_swimlane.png) | End-to-End-Prozess mit Rollen (Swimlane), SVG + Generator-Skript daneben |
+| [`diagrams/lagermodul_prozessflow.mmd`](diagrams/lagermodul_prozessflow.mmd) | Detail-Abläufe je Feature (Mermaid-Quelle) |
 | [`diagrams/lagermodul_prozessflow.png`](diagrams/lagermodul_prozessflow.png) | Prozessflow gerendert |
 
 ## Scope
@@ -20,5 +21,11 @@ Ziel ist es, das aktuelle Lagermodul in der Main App von PDR.cloud zu verbessern
 4. Wording „Gebindegröße“ (DEV-1732)
 
 **Folge-Tickets (Ausblick):** Rest-/Gebrauchtteile einlagern · Mindestbestand-Alarm · Ladenhüter-Report
+
+## End-to-End-Prozess
+
+![End-to-End-Swimlane](diagrams/lagermodul_e2e_swimlane.png)
+
+## Detail-Abläufe je Feature
 
 ![Prozessflow](diagrams/lagermodul_prozessflow.png)

@@ -8,8 +8,8 @@ flowchart LR
         direction TB
         A1["Vorgang → Kalkulation →<br/>Texterfassung / Positionen"]:::existing
         A2["Button „Lagerteil hinzufügen“"]:::new
-        A3["Lager-Dialog öffnet sich<br/>(nur Artikel der Vorgangs-Filiale,<br/>keine archivierten, Bestand 0 ausgegraut)<br/>Spalten: Nr., Bez., Hersteller/Modell,<br/>Bestand, Lagerort, UPE, VK"]:::new
-        A4["Artikel suchen / filtern<br/>(Nr., Bezeichnung, Warengruppe)<br/>+ Menge eingeben"]:::new
+        A3["Lager-Dialog öffnet sich<br/>(Filialfilter = Vorgangs-Filiale,<br/>andere Filialen nur zur Info,<br/>keine archivierten, Bestand 0 ausgegraut)<br/>Spalten: Nr., Bez., Hersteller/Modell,<br/>Bestand, Lagerort, UPE, VK"]:::new
+        A4["Artikel suchen / filtern<br/>(Filiale, Nr., Bezeichnung, Warengruppe)<br/>Mehrfachauswahl + Menge je Artikel"]:::new
         A5{"Bestand ≥ Menge?"}:::decision
         A6["Hinweis: „Nur X verfügbar“<br/>Menge wird auf X begrenzt<br/>(kein negativer Bestand)"]:::decision
         A7["Position anlegen (Typ Ersatzteil):<br/>Art.-Nr., Bezeichnung, Menge, Einheit,<br/>UPE + VK vorbelegt (änderbar)<br/>Flag lagerteil + lager_artikel_id"]:::new
@@ -52,7 +52,7 @@ flowchart LR
         B9 --> B10
     end
 
-    subgraph C["③ Lagerartikel löschen / archivieren (DEV-1731)"]
+    subgraph C["③ Lagerartikel archivieren & endgültig löschen (DEV-1731)"]
         direction TB
         C1["Startseite → Lager → Artikel"]:::existing
         C2["Aktion „Löschen“ am Artikel"]:::new
@@ -63,12 +63,22 @@ flowchart LR
         C7["Zusatzhinweis:<br/>Restbestand wird ausgebucht,<br/>Warenkorb-Position entfernt"]:::decision
         C8["Soft Delete:<br/>archived_at / archived_by setzen<br/>Bestandslog-Eintrag „Archiviert“"]:::new
         C9["Ausgeblendet in: Artikelliste, Suche,<br/>Lager-Dialog, Abgleich, Nachbestellung,<br/>Werkstatt-MA-Ansicht<br/>Historie bleibt erhalten"]:::new
+        C10["Archiv: Filter „Archivierte anzeigen“"]:::existing
+        C11{"Aktion wählen"}:::decision
+        C12["Wiederherstellen<br/>(Bestand 0)"]:::new
+        C13["„Endgültig löschen“<br/>Warnung: nicht umkehrbar"]:::new
+        C14{"Offene Inventur?"}:::decision
+        C15["Stammsatz löschen (E15)<br/>Referenzen → NULL,<br/>Belege behalten Kopie,<br/>Bestandslog bleibt,<br/>Audit-Log-Eintrag"]:::new
         C1 --> C2 --> C3 --> C4
         C4 -- Ja --> C5
         C4 -- Nein --> C6
         C6 -- Nein --> C8
         C6 -- Ja --> C7 --> C8
-        C8 --> C9
+        C8 --> C9 --> C10 --> C11
+        C11 -- Wiederherstellen --> C12
+        C11 -- Endgültig löschen --> C13 --> C14
+        C14 -- Ja --> C5
+        C14 -- Nein --> C15
     end
 
     A ~~~ B ~~~ C
